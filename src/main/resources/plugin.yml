@@ -1,0 +1,19 @@
+name: JukeboxRadio
+version: '${version}'
+main: su.nuv.radio.RadioPlugin
+api-version: '26.1'
+description: Радио в проигрывателе — Spotify, Apple Music и YouTube через Simple Voice Chat.
+authors: [nuv.su]
+softdepend: [voicechat]
+commands:
+  radio:
+    description: Радио в проигрывателе
+    usage: /radio [play|search|skip|pause|stop|volume|status|code]
+    aliases: [jukeboxradio]
+permissions:
+  jukeboxradio.use:
+    description: Открывать радио и управлять им
+    default: true
+  jukeboxradio.admin:
+    description: /radio stopall
+    default: op
