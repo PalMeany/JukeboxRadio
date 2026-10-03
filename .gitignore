@@ -3,3 +3,6 @@ build/
 .idea/
 *.iml
 .impeccable/review/
+.DS_Store
+fabric/run/
+fabric/run-server/

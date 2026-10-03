@@ -111,3 +111,15 @@ su.nuv.radio
 - 2026-09-28: GameUI не работает на 26.3 у клиента → меню переписано на сундук + собственный ресурс-пак +
   диалоги Paper; всё проверено на локальном стенде Paper 26.3 + клиент 26.3 (офлайн-режим), скриншоты в
   docs/screenshots/.
+
+## 6. Несколько платформ (Paper + Fabric)
+- [x] Ядро без Bukkit: интерфейсы `su.nuv.radio.platform` (планировщик, игроки, блоки, окно, диалог, пак),
+      конфиг и `links.yml` на SnakeYAML, тексты остаются на Adventure
+- [x] `paper`: прежний плагин поверх ядра (события, инвентарь, диалоги Paper, TitleUpdater)
+- [x] `fabric`: серверный мод — ChestMenu без перемещения предметов, заголовок пакетом open-screen,
+      ванильные диалоги с custom click action, Brigadier, точка входа `voicechat`, Adventure и SnakeYAML
+      внутри jar под relocation
+- [x] Тема меню `menu.theme: dark`
+- [x] Проверка: юнит-тесты ядра (24/24); Fabric — меню, очередь, поиск YouTube Music на клиенте 26.3;
+      Paper 26.3 build 143 — плагин включается, регистрируется в Simple Voice Chat, команды отвечают
+- 2026-10-03: проект разделён на `core`, `paper`, `fabric`; добавлена тёмная тема меню.

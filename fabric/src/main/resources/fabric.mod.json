@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "jukeboxradio",
+  "version": "${version}",
+  "name": "JukeboxRadio",
+  "description": "Радио в проигрывателе — Spotify, Apple Music и YouTube через Simple Voice Chat.",
+  "authors": [
+    "nuv.su"
+  ],
+  "contact": {
+    "sources": "https://github.com/PalMeany/JukeboxRadio"
+  },
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "su.nuv.radio.fabric.RadioMod"
+    ],
+    "voicechat": [
+      "su.nuv.radio.fabric.FabricVoicePlugin"
+    ]
+  },
+  "mixins": [
+    "jukeboxradio.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "fabric-api": "*",
+    "java": ">=25"
+  },
+  "recommends": {
+    "voicechat": "*"
+  }
+}
