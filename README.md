@@ -1,9 +1,9 @@
 # JukeboxRadio
 
-Плагин для Paper 26.3: превращает проигрыватель (jukebox) в радио. **Shift + ПКМ** по
-проигрывателю открывает меню, звук идёт через Simple Voice Chat от самого блока — его слышат все
-игроки рядом. Меню — ванильное окно сундука, которое плагин целиком перерисовывает своим
-ресурс-паком; никаких GUI-плагинов не нужно.
+Плагин для Paper 26.3 и серверный мод для Fabric 26.3: превращает проигрыватель (jukebox) в
+радио. **Shift + ПКМ** по проигрывателю открывает меню, звук идёт через Simple Voice Chat от самого
+блока — его слышат все игроки рядом. Меню — ванильное окно сундука, которое плагин целиком
+перерисовывает своим ресурс-паком; никаких GUI-плагинов не нужно.
 
 ![Играет](docs/screenshots/play.png)
 
@@ -22,8 +22,8 @@
 
 | Что | Зачем |
 |---|---|
-| Paper 26.3 (Java 25) | ядро |
-| [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) (Bukkit/Paper) | звук |
+| Paper 26.3 или Fabric 26.3 + Fabric API (Java 25) | ядро |
+| [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) (Bukkit/Paper или Fabric) | звук |
 | yt-dlp | скачивается автоматически (см. ниже) |
 | открытый TCP-порт 8166 | раздача ресурс-пака меню (можно выложить пак самому, см. ниже) |
 
@@ -32,7 +32,10 @@
 
 ## Установка
 
-1. Положите `JukeboxRadio-1.1.jar` в `plugins/` рядом с voicechat.
+1. Paper: положите `JukeboxRadio-1.2.jar` в `plugins/` рядом с voicechat.
+   Fabric: положите `JukeboxRadio-fabric-1.2.jar` в `mods/` рядом с voicechat и Fabric API
+   (мод нужен только на сервере). Ниже пути даны для Paper; на Fabric всё то же самое лежит
+   в `config/jukeboxradio/`.
 2. Запустите сервер — появится `plugins/JukeboxRadio/config.yml`.
 3. (Желательно) впишите ключи Spotify, чтобы работал поиск по Spotify:
    откройте https://developer.spotify.com/dashboard → *Create app* → скопируйте *Client ID* и
@@ -52,6 +55,12 @@
 
 Если игрок отказался от пака, меню не откроется (вместо графики были бы квадраты) — плагин
 подскажет включить наборы ресурсов сервера; команды `/radio` работают и без пака.
+
+`menu.theme: dark` рисует то же меню в тёмной палитре: почти чёрные панели со скруглёнными
+углами, плоские слоты, тёмные кнопки, светлый текст. По умолчанию — `vanilla`.
+
+На Fabric пак отправляется сразу после входа (у Paper — ещё в фазе конфигурации), а взрывы, огонь и
+поршни замечаются проверкой раз в две секунды: Fabric API не сообщает о них событиями.
 
 Флаг JVM `--enable-native-access=ALL-UNNAMED` убирает предупреждение Java 25 о нативных
 библиотеках декодера (без него всё работает).
@@ -192,7 +201,8 @@ lavaplayer играет его с диска: одну длинную ссылк
 ./gradlew build
 ```
 
-Gradle сам скачает JDK 25. Jar появится в `build/libs/`. Тесты:
+Gradle сам скачает JDK 25. Плагин для Paper появится в `paper/build/libs/`, мод для Fabric — в
+`fabric/build/libs/`. Тесты:
 
 ```bash
 ./gradlew test
@@ -203,17 +213,25 @@ Gradle сам скачает JDK 25. Jar появится в `build/libs/`. Те
 
 ## Устройство
 
+Три модуля Gradle: `core` не знает ни о Bukkit, ни о Fabric и работает через интерфейсы
+`su.nuv.radio.platform` (планировщик, игроки, блоки, окно-сундук, диалог, отправка пака);
+`paper` и `fabric` реализуют их и пересылают события своей платформы в `su.nuv.radio.Radio`.
+
 ```
-su.nuv.radio
+core/    su.nuv.radio
+├── Radio      сборка сервисов и события платформы (блок нажат, сломан, игрок вышел…)
+├── platform/  что ядру нужно от сервера: RadioPlatform, RadioPlayer, MenuView, DialogSpec
 ├── catalog/   универсальный слой метаданных: MusicCatalog, Spotify, YouTube, реестр
 ├── audio/     lavaplayer, поиск записи на YouTube Music, yt-dlp, PCM 48 кГц
 ├── voice/     Simple Voice Chat: канал у блока, категория громкости
 ├── station/   очередь, воспроизведение, повтор, история
-├── menu/      меню-сундук: экраны, анимации, клики, диалог поиска, обновление заголовка
+├── menu/      меню-сундук: экраны, анимации, клики, диалог поиска, темы
 ├── menu/pack/ генерация ресурс-пака (графика, шрифты, модели) и его раздача
 ├── menu/text/ сборка заголовка-«экрана», метрики ванильного шрифта
 ├── menu/art/  обложки: загрузка, уменьшение, цвет этикетки
-└── command/, listener/, config/
+└── relay/, command/, config/
+paper/   su.nuv.radio.paper — плагин: события Bukkit, инвентарь, диалоги Paper, обновление заголовка
+fabric/  su.nuv.radio.fabric — мод: события Fabric API, ChestMenu, ванильные диалоги, Brigadier
 ```
 
 План и журнал работы — `PLAN.md`, продуктовый контекст — `PRODUCT.md`.

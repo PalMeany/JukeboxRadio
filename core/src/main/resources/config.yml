@@ -1,0 +1,115 @@
+# JukeboxRadio — радио в проигрывателе.
+# Shift + ПКМ по проигрывателю открывает меню (нужен GameUI), звук идёт через Simple Voice Chat.
+# После изменения файла перезапустите сервер.
+
+catalog:
+  # Кто отвечает на поиск в меню: spotify | youtube (или id вашего провайдера, см. README).
+  # Если у выбранного провайдера нет ключей, поиск переключится на YouTube Music.
+  search-provider: spotify
+
+spotify:
+  # Ключи приложения из https://developer.spotify.com/dashboard (Client Credentials).
+  # Без ключей ссылки Spotify всё равно открываются через публичные embed-страницы,
+  # но поиск по Spotify недоступен.
+  client-id: ""
+  client-secret: ""
+  # Страна для доступности треков (ISO-код). Пусто — решает Spotify.
+  market: "US"
+  # Читать публичные embed-страницы, когда Web API не отвечает. С марта 2026 Spotify в режиме
+  # Development Mode не отдаёт треки чужих плейлистов — без этого такие плейлисты не откроются.
+  embed-fallback: true
+
+youtube:
+  # Порядок клиентов YouTube: MUSIC, WEB, MWEB, WEBEMBEDDED, ANDROID_VR, ANDROID, ANDROID_MUSIC, IOS, TV, TVHTML5SIMPLY
+  clients: [MUSIC, WEB, MWEB, WEBEMBEDDED, ANDROID_VR, TV]
+  # Если YouTube начинает отказывать («Sign in to confirm you're not a bot»), помогает одно из:
+  # refresh token OAuth (для клиента TV), poToken + visitorData (для WEB) или сервер yt-cipher.
+  oauth-refresh-token: ""
+  po-token: ""
+  visitor-data: ""
+  remote-cipher:
+    url: ""
+    password: ""
+
+audio:
+  # Как брать звук с YouTube (туда же ищутся треки Spotify):
+  #   auto       — yt-dlp, если он есть, иначе встроенный извлекатель (YouTube его часто блокирует);
+  #   yt-dlp     — только yt-dlp;
+  #   lavaplayer — только встроенный извлекатель (настройки youtube: ниже).
+  youtube-playback: auto
+  yt-dlp:
+    # Путь к yt-dlp. Пусто — ищется в PATH, иначе скачивается официальный релиз с GitHub
+    # в plugins/JukeboxRadio/bin (файл проверяется по SHA2-256SUMS релиза).
+    path: ""
+    auto-download: true
+    # Обновлять скачанный yt-dlp при старте (yt-dlp -U).
+    auto-update: true
+    # Доп. аргументы, например: ["--cookies", "/path/cookies.txt"] или ["--js-runtimes", "node"].
+    extra-args: []
+  # Сколько мегабайт скачанных треков хранить. yt-dlp скачивает трек целиком (кусками, на полной
+  # скорости), и он играет с диска: YouTube режет скорость одного длинного потока до реального
+  # времени, отчего звук заикается. 0 — не скачивать, играть по ссылке (как раньше).
+  cache-mb: 512
+
+network:
+  # HTTP-прокси для всех запросов плагина: yt-dlp, звук и поиск YouTube, Spotify, обложки.
+  # Нужен, если с сервера не открывается YouTube. Формат: http://127.0.0.1:3128 (только HTTP,
+  # без логина). Пусто — напрямую.
+  proxy: ""
+
+radio:
+  # Дальность слышимости, блоков.
+  distance: 48
+  default-volume: 70
+  max-queue: 500
+  # Сколько треков один игрок может держать в очереди (0 — без лимита).
+  max-per-player: 0
+  # Сколько треков брать из одного плейлиста/альбома.
+  collection-limit: 200
+  # Пауза перед пропуском трека, который не удалось загрузить.
+  fail-skip-seconds: 3
+  # Станция без музыки и слушателей удаляется через столько минут.
+  idle-minutes: 10
+
+# Нотные блоки-повторители. У каждого проигрывателя есть код связи (подсказка вкладки
+# «Проигрыватель» в меню или /radio code). Shift + ПКМ по нотному блоку -> ввести код: блок играет
+# то же, что проигрыватель, со своей громкостью. Слышно его на radio.distance.
+relay:
+  enabled: true
+  # Нотный блок подключается, если он не дальше стольких блоков от проигрывателя или от другого
+  # работающего повторителя той же сети: каждый повторитель продлевает зону, как Wi-Fi.
+  range: 48
+  # Сколько нотных блоков можно подключить к одному проигрывателю.
+  max-per-jukebox: 16
+
+open:
+  # true — открывать меню только с пустой рукой.
+  require-empty-hand: false
+
+voice:
+  # Название ползунка громкости в настройках Simple Voice Chat у игроков.
+  category-name: "Радио"
+
+menu:
+  # Тиков на один оборот пластинки в меню (16 кадров вращения, 20 тиков = 1 секунда).
+  spin-ticks: 64
+  # Оформление меню: vanilla — серые панели как у сундуков; dark — тёмные панели, плоские слоты,
+  # светлый текст и скруглённые углы (для серверов с тёмным интерфейсом).
+  theme: vanilla
+  # Не открывать меню без загруженного ресурс-пака радио (иначе вместо графики будут квадраты).
+  require-pack: true
+
+pack:
+  # Как доставить игрокам ресурс-пак меню (он добавляется к паку сервера, а не заменяет его):
+  #   self-host — встроенный HTTP-сервер плагина (нужен открытый TCP-порт);
+  #   external  — вы сами выкладываете plugins/JukeboxRadio/pack/jukeboxradio.zip и указываете URL;
+  #   none      — вы вливаете этот zip в свой серверный пак (ItemsAdder, Oraxen и т. п.).
+  mode: self-host
+  bind-ip: "0.0.0.0"
+  port: 8166
+  # Адрес, по которому игроки достучатся до сервера (IP или домен). auto — server-ip из server.properties.
+  public-address: auto
+  external-url: ""
+  # true — кикать игроков, отказавшихся от пака.
+  required: false
+  prompt: "Ресурс-пак для меню радио в проигрывателях."
