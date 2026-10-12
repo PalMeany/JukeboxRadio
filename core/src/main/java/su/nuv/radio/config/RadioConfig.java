@@ -69,7 +69,8 @@ public record RadioConfig(
                         clamp(radio.getInt("max-queue", 500), 1, 10_000),
                         Math.max(0, radio.getInt("max-per-player", 0)),
                         clamp(radio.getInt("fail-skip-seconds", 3), 1, 60) * 20,
-                        clamp(radio.getInt("idle-minutes", 10), 1, 1440)),
+                        clamp(radio.getInt("idle-minutes", 10), 1, 1440),
+                        file.getBoolean("relay.realign-on-approach", true)),
                 new MenuSettings(
                         clamp(ui.getInt("spin-ticks", 64), 16, 400),
                         ui.getBoolean("require-pack", true),

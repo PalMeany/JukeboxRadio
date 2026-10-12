@@ -44,6 +44,78 @@ class UnitTest {
     }
 
     @Test
+    void ytDlpFailuresThatAnotherUploadCanFix() {
+        // an age check and a missing video are about this upload; a bot check is about us
+        assertTrue(su.nuv.radio.audio.YtDlp.failure("ERROR: [youtube] abc: Sign in to confirm your age. Use --cookies")
+                instanceof su.nuv.radio.catalog.UnplayableVideoException);
+        assertTrue(su.nuv.radio.audio.YtDlp.failure("ERROR: [youtube] abc: Video unavailable")
+                instanceof su.nuv.radio.catalog.UnplayableVideoException);
+        assertTrue(su.nuv.radio.audio.YtDlp.failure("ERROR: [youtube] abc: Private video. Sign in if you've been granted access")
+                .getMessage().contains("вход"));
+        assertFalse(su.nuv.radio.audio.YtDlp.failure("ERROR: [youtube] abc: Sign in to confirm you're not a bot")
+                instanceof su.nuv.radio.catalog.UnplayableVideoException);
+        assertFalse(su.nuv.radio.audio.YtDlp.failure("") instanceof su.nuv.radio.catalog.UnplayableVideoException);
+    }
+
+    @Test
+    void listenerIsRealignedWhenASecondSpeakerComesIntoEarshot() {
+        final short[] quiet = new short[PcmFrames.SAMPLES_PER_FRAME];
+        final short[] loud = new short[PcmFrames.SAMPLES_PER_FRAME];
+        loud[10] = 20_000;
+        final java.util.UUID walker = java.util.UUID.randomUUID();
+        final java.util.UUID sitter = java.util.UUID.randomUUID();
+        final su.nuv.radio.audio.ListenerSync sync = new su.nuv.radio.audio.ListenerSync();
+        // one speaker each for a while: nothing to align
+        for (int i = 0; i < 300; i++) {
+            assertTrue(sync.beginFrame(quiet).isEmpty());
+            assertTrue(sync.reaches("a", walker));
+            assertTrue(sync.reaches("a", sitter));
+        }
+        // the walker comes into earshot of a second speaker during a loud passage: wait for quiet
+        assertTrue(sync.beginFrame(loud).isEmpty());
+        sync.reaches("a", walker);
+        sync.reaches("b", walker);
+        sync.reaches("a", sitter);
+        assertTrue(sync.beginFrame(loud).isEmpty());
+        sync.reaches("a", walker);
+        sync.reaches("b", walker);
+        // the first quiet frame: the walker alone
+        assertEquals(Set.of(walker), sync.beginFrame(quiet));
+        sync.only(Set.of(walker));
+        assertTrue(sync.reaches("a", walker));
+        assertFalse(sync.reaches("a", sitter));
+        sync.everyone();
+        assertTrue(sync.reaches("a", sitter));
+        // and not again while the same two speakers go on
+        for (int i = 0; i < 400; i++) {
+            assertTrue(sync.beginFrame(quiet).isEmpty());
+            sync.reaches("a", walker);
+            sync.reaches("b", walker);
+        }
+    }
+
+    @Test
+    void listenerRealignmentDoesNotWaitForQuietForever() {
+        final short[] loud = new short[PcmFrames.SAMPLES_PER_FRAME];
+        loud[10] = 20_000;
+        final java.util.UUID walker = java.util.UUID.randomUUID();
+        final su.nuv.radio.audio.ListenerSync sync = new su.nuv.radio.audio.ListenerSync();
+        for (int i = 0; i < 300; i++) {
+            sync.beginFrame(loud);
+            sync.reaches("a", walker);
+        }
+        int waited = 0;
+        while (sync.beginFrame(loud).isEmpty()) {
+            sync.reaches("a", walker);
+            sync.reaches("b", walker);
+            waited++;
+            assertTrue(waited < 400, "never realigned in loud music");
+        }
+        // forced after about three seconds of nothing but loud frames
+        assertTrue(waited >= 140 && waited <= 160, "waited " + waited + " frames");
+    }
+
+    @Test
     void resyncWaitsForQuiet() {
         final short[] quiet = new short[PcmFrames.SAMPLES_PER_FRAME];
         final short[] soft = new short[PcmFrames.SAMPLES_PER_FRAME];

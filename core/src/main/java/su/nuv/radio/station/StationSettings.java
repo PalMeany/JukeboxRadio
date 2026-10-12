@@ -6,7 +6,8 @@ package su.nuv.radio.station;
  * @param maxQueue       total queued tracks per station
  * @param maxPerPlayer   queued tracks one player may have waiting, 0 for no limit
  * @param failSkipTicks  pause before moving past a track that failed to load
+ * @param realignOnApproach  restart a listener's streams together when a second speaker comes into earshot
  */
 public record StationSettings(float distance, int defaultVolume, int maxQueue, int maxPerPlayer, int failSkipTicks,
-                              int idleMinutes) {
+                              int idleMinutes, boolean realignOnApproach) {
 }

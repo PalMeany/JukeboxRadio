@@ -16,6 +16,7 @@ import de.maxhenkel.voicechat.api.opus.OpusEncoder;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -76,7 +77,8 @@ public final class VoiceService implements VoicechatPlugin {
      * Opens a channel at the block centre. {@code frames} is polled every 20 ms from the voice chat
      * audio thread; returning {@code null} ends playback.
      */
-    public VoiceOutput open(UUID world, double x, double y, double z, float distance, Supplier<short[]> frames) {
+    public VoiceOutput open(UUID world, double x, double y, double z, float distance, Supplier<short[]> frames,
+                            Predicate<UUID> audience) {
         final VoicechatServerApi api = this.server;
         final Optional<Object> nativeWorld = this.worlds.apply(world);
         if (api == null || nativeWorld.isEmpty()) {
@@ -90,6 +92,7 @@ public final class VoiceService implements VoicechatPlugin {
         }
         channel.setCategory(CATEGORY);
         channel.setDistance(distance);
+        channel.setFilter(listener -> audience.test(listener.getUuid()));
         return new VoiceOutput(api, channel, frames);
     }
 
@@ -97,7 +100,7 @@ public final class VoiceService implements VoicechatPlugin {
      * Opens a relay channel at a note block. Unlike {@link #open}, it has no player of its own: the
      * station pushes each frame it plays, so every relay stays in step with the jukebox.
      */
-    public RelayOutput openRelay(UUID world, double x, double y, double z, float distance) {
+    public RelayOutput openRelay(UUID world, double x, double y, double z, float distance, Predicate<UUID> audience) {
         final VoicechatServerApi api = this.server;
         final Optional<Object> nativeWorld = this.worlds.apply(world);
         if (api == null || nativeWorld.isEmpty()) {
@@ -111,6 +114,7 @@ public final class VoiceService implements VoicechatPlugin {
         }
         channel.setCategory(CATEGORY);
         channel.setDistance(distance);
+        channel.setFilter(listener -> audience.test(listener.getUuid()));
         return new RelayOutput(channel, api.createEncoder());
     }
 
@@ -143,6 +147,16 @@ public final class VoiceService implements VoicechatPlugin {
             }
             this.channel.send(this.encoder.encode(frame));
             this.flushed = false;
+        }
+
+        /**
+         * Ends the stream for whoever the channel reaches right now, and nothing else: the encoder
+         * goes on, because the other listeners' stream does.
+         */
+        public synchronized void end() {
+            if (!this.closed) {
+                this.channel.flush();
+            }
         }
 
         /** Tells listeners the stream paused, so the next frame starts cleanly. */

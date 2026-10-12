@@ -8,6 +8,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
 import su.nuv.radio.audio.AudioEngine;
 import su.nuv.radio.audio.AudioResolver;
 import su.nuv.radio.audio.FrameCushion;
+import su.nuv.radio.audio.ListenerSync;
 import su.nuv.radio.audio.PcmFrames;
 import su.nuv.radio.audio.Resync;
 import su.nuv.radio.catalog.CatalogRegistry;
@@ -65,6 +66,8 @@ public final class RadioStation {
     private final Resync resync = new Resync(System.currentTimeMillis());
     /** A relay joined: realign at the next quiet moment. */
     private volatile boolean relayJoined;
+    /** Keeps each listener's speakers in step as they walk between them. */
+    private final ListenerSync listenerSync = new ListenerSync();
 
     public RadioStation(StationKey key, RadioPlatform platform, CatalogRegistry catalogs, AudioEngine engine,
                         AudioResolver resolver, VoiceService voice, StationSettings settings) {
@@ -169,7 +172,8 @@ public final class RadioStation {
         wanted.forEach((pos, volume) -> {
             VoiceService.RelayOutput out = current.get(pos);
             if (out == null) {
-                out = this.voice.openRelay(pos.world(), pos.centerX(), pos.centerY(), pos.centerZ(), distance);
+                out = this.voice.openRelay(pos.world(), pos.centerX(), pos.centerY(), pos.centerZ(), distance,
+                        listener -> this.reaches(pos, listener));
                 this.relayJoined = true;
             }
             if (out != null) {
@@ -501,7 +505,8 @@ public final class RadioStation {
     private void ensureOutput() {
         if (this.output == null) {
             this.output = this.voice.open(this.block.world(), this.block.centerX(), this.block.centerY(),
-                    this.block.centerZ(), this.settings.distance(), this::nextFrame);
+                    this.block.centerZ(), this.settings.distance(), this::nextFrame,
+                    listener -> this.reaches(this.block, listener));
             if (this.output == null) {
                 this.lastError = "Simple Voice Chat не запущен — звука не будет.";
                 return;
@@ -537,6 +542,9 @@ public final class RadioStation {
         final Map<BlockPos, VoiceService.RelayOutput> relays = this.relays;
         if (!relays.isEmpty()) {
             this.realignIfDue(frame, relays);
+            if (this.settings.realignOnApproach()) {
+                this.realignListeners(frame, relays);
+            }
         }
         final int stationVolume = this.volume;
         for (VoiceService.RelayOutput relay : relays.values()) {
@@ -568,6 +576,32 @@ public final class RadioStation {
             main.flushChannel();
         }
         relays.values().forEach(VoiceService.RelayOutput::flush);
+    }
+
+    /** Whether the speaker at {@code speaker} (the jukebox or a relay) reaches this listener right now. */
+    private boolean reaches(BlockPos speaker, UUID listener) {
+        return !this.settings.realignOnApproach() || this.listenerSync.reaches(speaker, listener);
+    }
+
+    /**
+     * Ends the streams of the listeners who have just come into earshot of a second speaker, for
+     * them alone, so that their client starts all of them again together (see {@link ListenerSync}).
+     */
+    private void realignListeners(short[] frame, Map<BlockPos, VoiceService.RelayOutput> relays) {
+        final Set<UUID> due = this.listenerSync.beginFrame(frame);
+        if (due.isEmpty()) {
+            return;
+        }
+        this.listenerSync.only(due);
+        try {
+            final VoiceService.VoiceOutput main = this.output;
+            if (main != null) {
+                main.flushChannel();
+            }
+            relays.values().forEach(VoiceService.RelayOutput::end);
+        } finally {
+            this.listenerSync.everyone();
+        }
     }
 
     private void flushRelays() {

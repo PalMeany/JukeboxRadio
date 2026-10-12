@@ -5,6 +5,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import su.nuv.radio.catalog.CatalogException;
+import su.nuv.radio.catalog.UnplayableVideoException;
 import su.nuv.radio.catalog.model.TrackMeta;
 
 import java.text.Normalizer;
@@ -55,6 +56,10 @@ public final class AudioResolver {
     /** Downloads in flight or done, by video URL, so a prefetch and the play share one download. */
     private final Map<String, CompletableFuture<Path>> files = lru(256);
     private final AudioCache cache;
+    /** Videos that turned out unplayable: a song matched to one of them is matched again without it. */
+    private final Map<String, Boolean> unplayable = lru(512);
+    /** How many different uploads of one song are tried before giving up. */
+    private static final int MAX_MATCHES = 3;
 
     private record CachedUrl(String url, long validUntil) {
     }
@@ -85,7 +90,31 @@ public final class AudioResolver {
         if (meta.streamRef() != null && !YOUTUBE.matcher(meta.streamRef()).find()) {
             return this.loadDirect(meta.streamRef());
         }
-        return this.video(meta).thenCompose(video -> this.playable(video, downloadable(meta)));
+        if (meta.streamRef() != null) {
+            // the player named this very video: there is nothing else to try
+            return this.playable(meta.streamRef(), downloadable(meta));
+        }
+        return this.matched(meta, 1);
+    }
+
+    /**
+     * A song from a catalog is played from whichever upload matches it best. That upload may be one
+     * YouTube will not give out (age check, removed, blocked here) while another upload of the same
+     * song plays fine, so a failed match is set aside and the next best one is tried.
+     */
+    private CompletableFuture<AudioTrack> matched(TrackMeta meta, int attempt) {
+        return this.video(meta).thenCompose(video -> this.playable(video, downloadable(meta))
+                .exceptionallyCompose(error -> {
+                    if (attempt >= MAX_MATCHES) {
+                        return CompletableFuture.failedFuture(error);
+                    }
+                    this.unplayable.put(video, Boolean.TRUE);
+                    this.videos.remove(meta.key());
+                    this.logger.info("No audio from " + video + " for \"" + meta.title() + "\", trying another upload");
+                    // if nothing else turns up, the first failure is the one worth showing
+                    return this.matched(meta, attempt + 1)
+                            .exceptionallyCompose(none -> CompletableFuture.failedFuture(error));
+                }));
     }
 
     /** Long videos (mixes, streams) would make players wait for tens of megabytes: stream those. */
@@ -124,12 +153,12 @@ public final class AudioResolver {
         final String query = (meta.mainArtist() + " " + meta.title()).strip();
         return this.engine.load("ytmsearch:" + query)
                 .thenCompose(first -> {
-                    final Optional<AudioTrack> best = first.flatMap(item -> pick(item, meta));
+                    final Optional<AudioTrack> best = first.flatMap(item -> pick(item, meta, this.unplayable::containsKey));
                     if (best.isPresent()) {
                         return CompletableFuture.completedFuture(best);
                     }
                     return this.engine.load("ytsearch:" + meta.mainArtist() + " - " + meta.title() + " audio")
-                            .thenApply(second -> second.flatMap(item -> pick(item, meta)));
+                            .thenApply(second -> second.flatMap(item -> pick(item, meta, this.unplayable::containsKey)));
                 })
                 .thenApply(found -> {
                     final AudioTrack track = found.orElseThrow(
@@ -153,6 +182,12 @@ public final class AudioResolver {
                     .thenCompose(file -> this.loadDirect(file.toString()))
                     .exceptionallyCompose(error -> {
                         this.files.remove(videoUrl);
+                        if (su.nuv.radio.util.Http.unwrap(error) instanceof UnplayableVideoException) {
+                            // streaming the same video would only be refused the same way
+                            this.logger.warning("yt-dlp: " + videoUrl + " cannot be played: "
+                                    + su.nuv.radio.util.Http.unwrap(error).getMessage());
+                            return CompletableFuture.failedFuture(error);
+                        }
                         this.logger.warning("yt-dlp download failed for " + videoUrl + ", streaming instead: "
                                 + su.nuv.radio.util.Http.unwrap(error));
                         return this.streamed(videoUrl);
@@ -184,6 +219,9 @@ public final class AudioResolver {
                     this.streams.remove(videoUrl);
                     this.logger.warning("yt-dlp stream failed for " + videoUrl + ": "
                             + su.nuv.radio.util.Http.unwrap(error));
+                    if (su.nuv.radio.util.Http.unwrap(error) instanceof UnplayableVideoException) {
+                        return CompletableFuture.failedFuture(error);
+                    }
                     return this.mode == Mode.AUTO ? this.loadDirect(videoUrl) : CompletableFuture.failedFuture(error);
                 });
     }
@@ -230,15 +268,20 @@ public final class AudioResolver {
     // ------------------------------------------------------------------ matching
 
     static Optional<AudioTrack> pick(AudioItem item, TrackMeta meta) {
+        return pick(item, meta, uri -> false);
+    }
+
+    /** @param skip videos (by URL) that must not be picked */
+    static Optional<AudioTrack> pick(AudioItem item, TrackMeta meta, java.util.function.Predicate<String> skip) {
         if (!(item instanceof AudioPlaylist playlist)) {
-            return firstTrack(item);
+            return firstTrack(item).filter(track -> !skip.test(track.getInfo().uri));
         }
         AudioTrack best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         final List<AudioTrack> candidates = playlist.getTracks();
         for (int i = 0; i < Math.min(10, candidates.size()); i++) {
             final AudioTrack candidate = candidates.get(i);
-            if (candidate.getInfo().isStream) {
+            if (candidate.getInfo().isStream || skip.test(candidate.getInfo().uri)) {
                 continue;
             }
             final double score = score(candidate.getInfo(), meta, i);

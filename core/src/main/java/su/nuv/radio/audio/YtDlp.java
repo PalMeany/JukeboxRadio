@@ -1,6 +1,7 @@
 package su.nuv.radio.audio;
 
 import su.nuv.radio.catalog.CatalogException;
+import su.nuv.radio.catalog.UnplayableVideoException;
 import su.nuv.radio.util.Http;
 import su.nuv.radio.util.NetProxy;
 
@@ -276,7 +277,7 @@ public final class YtDlp {
             if (process.exitValue() != 0 || file == null) {
                 final String error = stderr.completeOnTimeout("", 2, TimeUnit.SECONDS).join();
                 this.logger.fine(() -> "yt-dlp download failed for " + videoUrl + ": " + error);
-                throw new CatalogException(friendly(error));
+                throw failure(error);
             }
             return file;
         } catch (IOException error) {
@@ -309,7 +310,7 @@ public final class YtDlp {
             if (process.exitValue() != 0 || url == null) {
                 final String error = stderr.completeOnTimeout("", 2, TimeUnit.SECONDS).join();
                 this.logger.fine(() -> "yt-dlp failed for " + videoUrl + ": " + error);
-                throw new CatalogException(friendly(error));
+                throw failure(error);
             }
             return url;
         } catch (IOException error) {
@@ -328,17 +329,19 @@ public final class YtDlp {
         }
     }
 
-    static String friendly(String stderr) {
+    /** What went wrong, from what yt-dlp printed. Public for tests. */
+    public static CatalogException failure(String stderr) {
         final String text = stderr == null ? "" : stderr.toLowerCase(Locale.ROOT);
+        // "Sign in to confirm your age" is an age check, not the bot check that also says "sign in"
+        if (text.contains("confirm your age") || text.contains("age-restricted") || text.contains("age restricted")) {
+            return new UnplayableVideoException("Видео с возрастным ограничением: без входа в аккаунт YouTube его не отдаёт.");
+        }
         if (text.contains("sign in") || text.contains("bot")) {
-            return "YouTube просит вход: задайте cookies для yt-dlp в config.yml.";
+            return new CatalogException("YouTube просит вход: задайте cookies для yt-dlp в config.yml.");
         }
         if (text.contains("private") || text.contains("unavailable") || text.contains("removed")) {
-            return "Видео недоступно.";
+            return new UnplayableVideoException("Видео недоступно.");
         }
-        if (text.contains("age")) {
-            return "Видео с возрастным ограничением.";
-        }
-        return "YouTube не отдал аудио.";
+        return new CatalogException("YouTube не отдал аудио.");
     }
 }
